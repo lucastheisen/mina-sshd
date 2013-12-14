@@ -1,12 +1,10 @@
 package org.apache.sshd.sftp.impl;
 
-import java.nio.ByteBuffer;
 
-
-import org.apache.sshd.sftp.FileAttributes;
 import org.apache.sshd.sftp.PacketData;
 import org.apache.sshd.sftp.PacketType;
 import org.apache.sshd.sftp.client.packetdata.MkDir;
+
 
 public class DefaultMkDir extends AbstractRequest implements MkDir {
 
@@ -21,13 +19,7 @@ public class DefaultMkDir extends AbstractRequest implements MkDir {
     }
 
     @Override
-    public int getSize() {
-        // TODO Auto-generated method stub
-        return 0;
-    }
-
-    @Override
-    public FileAttributes getFileAttributes() {
+    public SftpFileAttributes getFileAttributes() {
         // TODO Auto-generated method stub
         return null;
     }
@@ -39,19 +31,19 @@ public class DefaultMkDir extends AbstractRequest implements MkDir {
     }
 
     @Override
-    public PacketData parseRequestFrom( ByteBuffer buffer ) {
+    public PacketData parseRequestFrom( SftpProtocolBuffer buffer ) {
         // TODO Auto-generated method stub
         return null;
     }
 
     @Override
-    public void writeRequestTo( ByteBuffer buffer ) {
+    public void writeRequestTo( SftpProtocolBuffer buffer ) {
         // TODO Auto-generated method stub
-        
+
     }
 
     @Override
-    public MkDir setFileAttributes() {
+    public MkDir setFileAttributes( SftpFileAttributes sftpFileAttributes ) {
         // TODO Auto-generated method stub
         return null;
     }
@@ -60,5 +52,11 @@ public class DefaultMkDir extends AbstractRequest implements MkDir {
     public MkDir setPath( String path ) {
         // TODO Auto-generated method stub
         return null;
+    }
+
+    @Override
+    public int getRequestSize() {
+        // TODO Auto-generated method stub
+        return 0;
     }
 }

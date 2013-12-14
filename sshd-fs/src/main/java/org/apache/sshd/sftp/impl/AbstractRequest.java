@@ -1,9 +1,6 @@
 package org.apache.sshd.sftp.impl;
 
 
-import java.nio.ByteBuffer;
-
-
 import org.apache.sshd.sftp.PacketData;
 import org.apache.sshd.sftp.Request;
 
@@ -19,20 +16,26 @@ public abstract class AbstractRequest implements Request {
     public int getId() {
         return id;
     }
+    
+    abstract public int getRequestSize();
 
     @Override
-    public PacketData parseFrom( ByteBuffer buffer ) {
-        id = buffer.getInt();
-        parseRequestFrom( buffer );
-        return this;
+    public int getSize() {
+        return 4 + getRequestSize();
     }
 
-    abstract public PacketData parseRequestFrom( ByteBuffer buffer );
+    @Override
+    public PacketData parseFrom( SftpProtocolBuffer buffer ) {
+        id = buffer.getInt();
+        return parseRequestFrom( buffer );
+    }
 
-    abstract public void writeRequestTo( ByteBuffer buffer );
+    abstract public PacketData parseRequestFrom( SftpProtocolBuffer buffer );
+
+    abstract public void writeRequestTo( SftpProtocolBuffer buffer );
 
     @Override
-    public void writeTo( ByteBuffer buffer ) {
+    public void writeTo( SftpProtocolBuffer buffer ) {
         buffer.putInt( id );
         writeRequestTo( buffer );
     }

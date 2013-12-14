@@ -2,7 +2,6 @@ package org.apache.sshd.sftp.impl;
 
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -11,10 +10,12 @@ import java.util.Map;
 import org.apache.sshd.sftp.PacketData;
 import org.apache.sshd.sftp.PacketType;
 import org.apache.sshd.sftp.client.packetdata.Version;
+import org.apache.sshd.sftp.impl.SftpProtocolBuffer.PackBuffer;
+import org.apache.sshd.sftp.impl.SftpProtocolBuffer.PackCallback;
 
 
 public class DefaultVersion implements PacketData, Version {
-    private ByteBuffer data;
+    private SftpProtocolBuffer data;
     private Map<String, String> extensions;
     private int version;
 
@@ -29,25 +30,18 @@ public class DefaultVersion implements PacketData, Version {
         return this;
     }
 
-    private ByteBuffer getData() {
+    private SftpProtocolBuffer getData() {
         if ( data == null ) {
-            data = ByteBuffer.allocate( 34000 );
-            data.putInt( version );
-            for ( Map.Entry<String, String> extension : extensions.entrySet() ) {
-                String extensionName = extension.getKey();
-                data.putInt( extensionName.length() );
-                data.put( extensionName.getBytes( UTF_8 ) );
-
-                String extensionData = extension.getValue();
-                if ( extensionData == null || extensionData.isEmpty() ) {
-                    data.putInt( 0 );
+            data = SftpProtocolBuffer.pack( new PackCallback() {
+                @Override
+                public void pack( PackBuffer packBuffer ) {
+                    packBuffer.putInt( version );
+                    for ( Map.Entry<String, String> extension : extensions.entrySet() ) {
+                        packBuffer.putString( extension.getKey() );
+                        packBuffer.putString( extension.getValue() );
+                    }
                 }
-                else {
-                    data.putInt( extensionData.length() );
-                    data.put( extensionData.getBytes( UTF_8 ) );
-                }
-            }
-            data.flip();
+            } );
         }
         return data.asReadOnlyBuffer();
     }
@@ -71,33 +65,14 @@ public class DefaultVersion implements PacketData, Version {
     }
 
     @Override
-    public DefaultVersion parseFrom( ByteBuffer buffer ) {
+    public DefaultVersion parseFrom( SftpProtocolBuffer buffer ) {
         this.data = buffer;
         version = data.getInt();
         if ( data.hasRemaining() ) {
-            String extensionName = null;
-            String extensionData = null;
-            byte[] bytes = new byte[data.remaining()];
             while ( data.hasRemaining() ) {
-                // extension name
-                int stringSize = data.getInt();
-                data.get( bytes, 0, stringSize );
-                extensionName = new String( bytes, 0, stringSize, UTF_8 );
-
-                // extension data
-                stringSize = data.getInt();
-                if ( stringSize == 0 ) {
-                    extensionData = "";
-                }
-                else {
-                    data.get( bytes, 0, stringSize );
-                    extensionData = new String( bytes, 0, stringSize, UTF_8 );
-                }
-
-                extensions.put( extensionName, extensionData );
+                extensions.put( data.getString(), data.getString() );
             }
         }
-
         return this;
     }
 
@@ -111,8 +86,9 @@ public class DefaultVersion implements PacketData, Version {
     public String toString() {
         StringBuilder builder = new StringBuilder( "{'version':'" )
                 .append( version )
-                .append( "','extensions':{" );
+                .append( "'" );
         if ( !extensions.isEmpty() ) {
+            builder.append( ",'extensions':{" );
             boolean first = true;
             for ( Map.Entry<String, String> extension : extensions.entrySet() ) {
                 if ( first ) {
@@ -127,12 +103,13 @@ public class DefaultVersion implements PacketData, Version {
                         .append( extension.getValue() )
                         .append( "'" );
             }
+            builder.append( "}" );
         }
         return builder.append( "}" ).toString();
     }
 
     @Override
-    public void writeTo( ByteBuffer buffer ) throws IOException {
+    public void writeTo( SftpProtocolBuffer buffer ) throws IOException {
         buffer.put( getData() );
     }
 }

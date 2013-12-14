@@ -40,7 +40,7 @@ public class DefaultRequestProcessor implements RequestProcessor {
     private ResponseProcessor responseProcessor;
     private ChannelSubsystem sftpChannel;
     private Version version = null;
-    private ByteBuffer writeBuffer = ByteBuffer.allocateDirect( 65536 );
+    private SftpProtocolBuffer writeBuffer = SftpProtocolBuffer.allocateDirect( 65536 );
     private ReentrantLock writeLock = new ReentrantLock();
 
     public DefaultRequestProcessor( ClientSession clientSession, PacketDataFactory packetDataFactory )
@@ -79,13 +79,13 @@ public class DefaultRequestProcessor implements RequestProcessor {
         clientSession.close( immediately );
     }
 
-    void resizeBuffer( int atLeast ) throws IOException {
-        int newSize = writeBuffer.capacity() + Math.max( atLeast, writeBuffer.capacity() );
-        ByteBuffer newWriteBuffer = ByteBuffer.allocateDirect( newSize );
-        writeBuffer.flip();
-        newWriteBuffer.put( writeBuffer );
-        writeBuffer = newWriteBuffer;
-    }
+//    void resizeBuffer( int atLeast ) throws IOException {
+//        int newSize = writeBuffer.capacity() + Math.max( atLeast, writeBuffer.capacity() );
+//        ByteBuffer newWriteBuffer = ByteBuffer.allocateDirect( newSize );
+//        writeBuffer.flip();
+//        newWriteBuffer.put( writeBuffer );
+//        writeBuffer = newWriteBuffer;
+//    }
 
     public int negotiatedVersion() {
         return Math.min( init.getVersion(), version.getVersion() );
@@ -97,11 +97,9 @@ public class DefaultRequestProcessor implements RequestProcessor {
         try {
             writeLock.lock();
             // ensure size
-            if ( writeBuffer.capacity() < packetSize ) {
-                resizeBuffer( packetSize );
-            }
+            writeBuffer.ensureSize( packetSize );
             writeBuffer.putInt( packetDataSize + 1 );
-            writeBuffer.put( packetData.getPacketType().getValue() );
+            writeBuffer.putPacketType( packetData.getPacketType() );
             packetData.writeTo( writeBuffer );
             writeBuffer.flip();
 
@@ -113,7 +111,7 @@ public class DefaultRequestProcessor implements RequestProcessor {
             }
 
             Channels.newChannel( this.sftpChannel.getInvertedIn() )
-                    .write( writeBuffer );
+                    .write( writeBuffer.getByteBuffer() );
 
             this.sftpChannel.getInvertedIn().flush();
 
@@ -229,7 +227,7 @@ public class DefaultRequestProcessor implements RequestProcessor {
                 // got one
                 readBuffer.position( currentPacketStart );
                 readBuffer.limit( currentPacketEnd );
-                processPacket( readBuffer.asReadOnlyBuffer() );
+                processPacket( SftpProtocolBuffer.wrap( readBuffer.asReadOnlyBuffer() ) );
 
                 // clean up and prepare for more
                 readBuffer.compact();
@@ -238,9 +236,9 @@ public class DefaultRequestProcessor implements RequestProcessor {
             }
         }
 
-        void processPacket( ByteBuffer buffer ) {
+        void processPacket( SftpProtocolBuffer buffer ) {
             buffer.getInt(); // packet size not currently used
-            PacketType packetType = PacketType.fromValue( buffer.get() );
+            PacketType packetType = buffer.getPacketType();
             PacketData packetData = packetDataFactory.newInstance( packetType )
                     .parseFrom( buffer );
             if ( packetType == PacketType.SSH_FXP_VERSION ) {
