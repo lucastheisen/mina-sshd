@@ -11,7 +11,9 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.UserPrincipal;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -21,6 +23,7 @@ public class SftpFileAttributes implements PosixFileAttributes {
 
     private FileTime creationTime;
     private boolean directory;
+    private Map<String, String> extended;
     private Object fileKey;
     private SftpGroupPrincipal groupPrincipal;
     private FileTime lastAccessTime;
@@ -31,6 +34,10 @@ public class SftpFileAttributes implements PosixFileAttributes {
     private long size;
     private boolean symbolicLink;
     private SftpUserPrincipal userPrincipal;
+
+    public SftpFileAttributes() {
+        extended = new HashMap<>();
+    }
 
     @Override
     public FileTime creationTime() {
@@ -77,7 +84,7 @@ public class SftpFileAttributes implements PosixFileAttributes {
         return lastModifiedTime;
     }
 
-    public SftpFileAttributes parseFrom( ByteBuffer buffer ) {
+    public SftpFileAttributes parseFrom( SftpProtocolBuffer buffer ) {
         EnumSet<Flag> flags = Flag.fromMask( buffer.getInt() );
         if ( flags.contains( Flag.SSH_FILEXFER_ATTR_SIZE ) ) {
             size = buffer.getLong();
@@ -95,20 +102,11 @@ public class SftpFileAttributes implements PosixFileAttributes {
         }
         if ( flags.contains( Flag.SSH_FILEXFER_ATTR_EXTENDED ) ) {
             int count = buffer.getInt();
-            byte[] bytes = null;
-            String[] nameValue = new String[2];
             for ( int i = 0; i < count; i++ ) {
-                for ( int j = 0; j < 2; j++ ) {
-                    int size = buffer.getInt();
-                    if ( bytes == null || bytes.length < size ) {
-                        bytes = new byte[size];
-                    }
-                    buffer.get( bytes, 0, size );
-                    nameValue[j] = new String( bytes, UTF8 );
-                }
+                extended.put( buffer.getString(), buffer.getString() );
             }
         }
-        
+
         return this;
     }
 
@@ -128,7 +126,7 @@ public class SftpFileAttributes implements PosixFileAttributes {
         return size;
     }
 
-    public void writeTo( ByteBuffer buffer ) throws IOException {
+    public void writeTo( SftpProtocolBuffer buffer ) {
         // TODO Auto-generated method stub
     }
 
@@ -144,7 +142,7 @@ public class SftpFileAttributes implements PosixFileAttributes {
         private Flag( int value ) {
             this.value = value;
         }
-        
+
         public static EnumSet<Flag> fromMask( int mask ) {
             List<Flag> flags = new ArrayList<>();
             for ( Flag flag : values() ) {
@@ -155,14 +153,14 @@ public class SftpFileAttributes implements PosixFileAttributes {
             return EnumSet.copyOf( flags );
         }
     }
-    
+
     public static class SftpGroupPrincipal implements GroupPrincipal {
         private int gid;
-        
+
         public SftpGroupPrincipal( int gid ) {
             this.gid = gid;
         }
-        
+
         public int getGid() {
             return gid;
         }
@@ -172,14 +170,14 @@ public class SftpFileAttributes implements PosixFileAttributes {
             return Integer.toString( gid );
         }
     }
-    
+
     public static class SftpUserPrincipal implements UserPrincipal {
         private int uid;
-        
+
         public SftpUserPrincipal( int uid ) {
             this.uid = uid;
         }
-        
+
         @Override
         public String getName() {
             return Integer.toString( uid );

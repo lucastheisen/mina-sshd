@@ -7,14 +7,14 @@ import java.util.Map;
 import org.apache.sshd.sftp.PacketData;
 
 
-public interface Init extends PacketData {
+public interface Init extends PacketData<Init> {
 
-    public abstract Init addExtension( String name, String data );
+    public Init addExtension( String name, String data );
 
     public abstract Map<String, String> getExtensions();
 
     public abstract int getVersion();
 
-    public abstract Init setVersion( int version );
+    public Init setVersion( int version );
 
 }

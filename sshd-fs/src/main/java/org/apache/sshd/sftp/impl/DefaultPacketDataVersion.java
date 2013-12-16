@@ -1,49 +1,28 @@
 package org.apache.sshd.sftp.impl;
 
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 
-import org.apache.sshd.sftp.PacketData;
 import org.apache.sshd.sftp.PacketType;
 import org.apache.sshd.sftp.client.packetdata.Version;
-import org.apache.sshd.sftp.impl.SftpProtocolBuffer.PackBuffer;
-import org.apache.sshd.sftp.impl.SftpProtocolBuffer.PackCallback;
 
 
-public class DefaultVersion implements PacketData, Version {
-    private SftpProtocolBuffer data;
+public class DefaultPacketDataVersion implements Version {
     private Map<String, String> extensions;
     private int version;
 
-    public DefaultVersion() {
+    public DefaultPacketDataVersion() {
         extensions = new HashMap<>();
     }
 
     @Override
-    public DefaultVersion addExtension( String name, String data ) {
+    public DefaultPacketDataVersion addExtension( String name, String data ) {
         extensions.put( name, data );
         data = null;
         return this;
-    }
-
-    private SftpProtocolBuffer getData() {
-        if ( data == null ) {
-            data = SftpProtocolBuffer.pack( new PackCallback() {
-                @Override
-                public void pack( PackBuffer packBuffer ) {
-                    packBuffer.putInt( version );
-                    for ( Map.Entry<String, String> extension : extensions.entrySet() ) {
-                        packBuffer.putString( extension.getKey() );
-                        packBuffer.putString( extension.getValue() );
-                    }
-                }
-            } );
-        }
-        return data.asReadOnlyBuffer();
     }
 
     @Override
@@ -51,12 +30,14 @@ public class DefaultVersion implements PacketData, Version {
         return Collections.unmodifiableMap( extensions );
     }
 
+    @Override
     public PacketType getPacketType() {
         return PacketType.SSH_FXP_INIT;
     }
 
-    public int getSize() {
-        return getData().remaining();
+    @Override
+    public byte getPacketTypeByte() {
+        return getPacketType().getValue();
     }
 
     @Override
@@ -65,19 +46,26 @@ public class DefaultVersion implements PacketData, Version {
     }
 
     @Override
-    public DefaultVersion parseFrom( SftpProtocolBuffer buffer ) {
-        this.data = buffer;
-        version = data.getInt();
-        if ( data.hasRemaining() ) {
-            while ( data.hasRemaining() ) {
-                extensions.put( data.getString(), data.getString() );
+    public DefaultPacketDataVersion parseFrom( SftpProtocolBuffer buffer ) {
+        version = buffer.getInt();
+        if ( buffer.hasRemaining() ) {
+            while ( buffer.hasRemaining() ) {
+                extensions.put( buffer.getString(), buffer.getString() );
             }
         }
         return this;
     }
 
     @Override
-    public DefaultVersion setVersion( int version ) {
+    public DefaultPacketDataVersion setPacketTypeByte( byte packetDataTypeByte ) {
+        if ( getPacketType() != PacketType.fromValue( packetDataTypeByte ) ) {
+            throw new UnsupportedOperationException( "trying to change packet type of a concrete implementation of packet data is illegal" );
+        }
+        return this;
+    }
+
+    @Override
+    public DefaultPacketDataVersion setVersion( int version ) {
         this.version = version;
         return this;
     }
@@ -109,7 +97,11 @@ public class DefaultVersion implements PacketData, Version {
     }
 
     @Override
-    public void writeTo( SftpProtocolBuffer buffer ) throws IOException {
-        buffer.put( getData() );
+    public void writeTo( SftpProtocolBuffer buffer ) {
+        buffer.putInt( version );
+        for ( Map.Entry<String, String> extension : extensions.entrySet() ) {
+            buffer.putString( extension.getKey() );
+            buffer.putString( extension.getValue() );
+        }
     }
 }

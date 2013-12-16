@@ -3,7 +3,7 @@ package org.apache.sshd.sftp.client.packetdata;
 import org.apache.sshd.sftp.Request;
 import org.apache.sshd.sftp.impl.SftpFileAttributes;
 
-public interface MkDir extends Request {
+public interface MkDir extends Request<MkDir> {
     public SftpFileAttributes getFileAttributes();
     
     public String getPath();

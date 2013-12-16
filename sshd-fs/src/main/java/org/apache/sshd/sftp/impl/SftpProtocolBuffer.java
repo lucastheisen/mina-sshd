@@ -3,16 +3,13 @@ package org.apache.sshd.sftp.impl;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.util.concurrent.locks.ReentrantLock;
 
 
-import org.apache.sshd.sftp.PacketType;
+import org.apache.sshd.sftp.PacketData;
 
 
 public class SftpProtocolBuffer {
     private static final Charset UTF8 = Charset.forName( "UTF-8" );
-    private static PackBuffer packBuffer = new PackBuffer();
-    private static ReentrantLock packLock = new ReentrantLock();
 
     private ByteBuffer buffer;
     private byte[] stringBuffer;
@@ -27,13 +24,6 @@ public class SftpProtocolBuffer {
 
     public static SftpProtocolBuffer allocateDirect( int size ) {
         return new SftpProtocolBuffer( ByteBuffer.allocateDirect( size ) );
-    }
-
-    private static SftpProtocolBuffer copy( SftpProtocolBuffer from ) {
-        SftpProtocolBuffer to = new SftpProtocolBuffer(
-                ByteBuffer.allocateDirect( from.remaining() ) );
-        to.put( from );
-        return to;
     }
 
     public SftpProtocolBuffer asReadOnlyBuffer() {
@@ -70,6 +60,10 @@ public class SftpProtocolBuffer {
         buffer.flip();
     }
 
+    public byte get() {
+        return buffer.get();
+    }
+
     public void get( byte[] bytes ) {
         buffer.get( bytes );
     }
@@ -82,8 +76,8 @@ public class SftpProtocolBuffer {
         return buffer.getInt();
     }
 
-    public PacketType getPacketType() {
-        return PacketType.fromValue( buffer.get() );
+    public long getLong() {
+        return buffer.getLong();
     }
 
     public String getString() {
@@ -99,15 +93,8 @@ public class SftpProtocolBuffer {
         return new String( stringBuffer, 0, size, UTF8 );
     }
 
-    public static SftpProtocolBuffer pack( PackCallback packCallback ) {
-        try {
-            packLock.lock();
-            packCallback.pack( packBuffer );
-            return packBuffer.pack();
-        }
-        finally {
-            packLock.unlock();
-        }
+    public void put( byte[] bytes ) {
+        this.buffer.put( bytes );
     }
 
     public void put( SftpProtocolBuffer buffer ) {
@@ -118,8 +105,17 @@ public class SftpProtocolBuffer {
         buffer.putInt( value );
     }
 
-    public void putPacketType( PacketType packetType ) {
-        buffer.put( packetType.getValue() );
+    public void putLong( long value ) {
+        buffer.putLong( value );
+    }
+
+    public void putPacket( PacketData<?> packetData ) {
+        int start = buffer.position();
+        int packetStart = start + 4;
+        buffer.position( packetStart );
+        buffer.put( packetData.getPacketTypeByte() );
+        packetData.writeTo( this );
+        buffer.putInt( start, buffer.position() - packetStart );
     }
 
     public void putString( String value ) {
@@ -136,44 +132,5 @@ public class SftpProtocolBuffer {
 
     public static SftpProtocolBuffer wrap( ByteBuffer buffer ) {
         return new SftpProtocolBuffer( buffer );
-    }
-
-    public static interface PackCallback {
-        public void pack( PackBuffer packBuffer );
-    }
-
-    public static class PackBuffer {
-        private SftpProtocolBuffer buffer;
-
-        private PackBuffer() {
-            this.buffer = SftpProtocolBuffer.allocate( 65536 );
-        }
-
-        private SftpProtocolBuffer pack() {
-            buffer.flip();
-            SftpProtocolBuffer packed = SftpProtocolBuffer.copy( buffer );
-            buffer.clear();
-            return packed;
-        }
-
-        public void put( SftpProtocolBuffer buffer ) {
-            this.buffer.ensureSize( this.buffer.remaining() + buffer.remaining() );
-            this.buffer.put( buffer );
-        }
-
-        public void putInt( int value ) {
-            this.buffer.ensureSize( buffer.remaining() + 4 );
-            this.buffer.putInt( value );
-        }
-
-        public void putPacketType( PacketType packetType ) {
-            this.buffer.ensureSize( buffer.remaining() + 1 );
-            this.buffer.putPacketType( packetType );
-        }
-
-        public void putString( String value ) {
-            this.buffer.ensureSize( buffer.remaining() + value.length() );
-            this.buffer.putString( value );
-        }
     }
 }

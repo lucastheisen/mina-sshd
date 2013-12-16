@@ -2,5 +2,7 @@ package org.apache.sshd.sftp;
 
 
 public interface PacketDataFactory {
-    public PacketData newInstance( PacketType packetType );
+    public <T extends PacketData<T>> T newInstance( byte packetDataType );
+
+    public <T extends PacketData<T>> T newInstance( Class<T> interfaceType );
 }

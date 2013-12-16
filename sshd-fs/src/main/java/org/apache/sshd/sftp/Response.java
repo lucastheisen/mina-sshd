@@ -1,6 +1,4 @@
 package org.apache.sshd.sftp;
 
-
-public interface Response extends PacketData {
-    public int getId();
+public interface Response<T> extends RequestOrResponse<T> {
 }

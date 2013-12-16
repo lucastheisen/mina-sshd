@@ -13,7 +13,7 @@ import org.apache.sshd.sftp.PacketData;
  * 
  * @author Lucas Theisen
  */
-public interface Version extends PacketData {
+public interface Version extends PacketData<Version> {
     public Version addExtension( String name, String data );
 
     public Map<String, String> getExtensions();

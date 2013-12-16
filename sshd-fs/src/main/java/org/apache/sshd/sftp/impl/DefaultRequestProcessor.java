@@ -18,10 +18,11 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.sshd.ClientSession;
 import org.apache.sshd.client.channel.ChannelSubsystem;
+import org.apache.sshd.sftp.NegotiatedVersion;
 import org.apache.sshd.sftp.PacketData;
 import org.apache.sshd.sftp.PacketDataFactory;
-import org.apache.sshd.sftp.PacketType;
 import org.apache.sshd.sftp.Request;
+import org.apache.sshd.sftp.RequestIdFactory;
 import org.apache.sshd.sftp.RequestProcessor;
 import org.apache.sshd.sftp.Response;
 import org.apache.sshd.sftp.client.packetdata.Init;
@@ -35,26 +36,40 @@ public class DefaultRequestProcessor implements RequestProcessor {
     private static final int CLIENT_SFTP_PROTOCOL_VERSION = 3;
 
     private ClientSession clientSession;
-    private Init init;
     private PacketDataFactory packetDataFactory;
+    private RequestIdFactory requestIdFactory;
     private ResponseProcessor responseProcessor;
     private ChannelSubsystem sftpChannel;
-    private Version version = null;
+    private NegotiatedVersion version;
     private SftpProtocolBuffer writeBuffer = SftpProtocolBuffer.allocateDirect( 65536 );
     private ReentrantLock writeLock = new ReentrantLock();
 
+    public DefaultRequestProcessor( ClientSession clientSession )
+            throws IOException, InterruptedException, ExecutionException {
+        this( clientSession, new DefaultPacketDataFactory() );
+    }
+
     public DefaultRequestProcessor( ClientSession clientSession, PacketDataFactory packetDataFactory )
+            throws IOException, InterruptedException, ExecutionException {
+        this( clientSession, packetDataFactory, new DefaultRequestIdFactory() );
+    }
+
+    public DefaultRequestProcessor( ClientSession clientSession,
+            PacketDataFactory packetDataFactory, RequestIdFactory requestIdFactory )
             throws IOException, InterruptedException, ExecutionException {
         this.clientSession = clientSession;
         this.packetDataFactory = packetDataFactory;
+        this.requestIdFactory = requestIdFactory;
+        this.responseProcessor = new ResponseProcessor();
+
+        // initialize the sftp channel
         this.sftpChannel = clientSession.createSubsystemChannel( "sftp" );
-        ResponseProcessor responseProcessor = new ResponseProcessor();
         try {
             this.sftpChannel.setOut( responseProcessor );
             this.sftpChannel.setErr( new OutputStream() {
                 @Override
                 public void write( int b ) throws IOException {
-                    // TODO determine what should be done with writes to err
+                    logger.error( "STDERR: {}", b );
                 }
             } );
             this.sftpChannel.open().await();
@@ -64,10 +79,13 @@ public class DefaultRequestProcessor implements RequestProcessor {
             throw (IOException)new InterruptedIOException().initCause( e );
         }
 
-        init = ((Init)packetDataFactory.newInstance( PacketType.SSH_FXP_INIT ))
+        // initialized the protocol
+        Init init = packetDataFactory.newInstance( Init.class )
                 .setVersion( CLIENT_SFTP_PROTOCOL_VERSION );
         writePacket( init );
-        this.version = responseProcessor.getVersion().get();
+        Version version = responseProcessor.getVersion().get();
+        this.version = new DefaultNegotiatedVersion( init, version );
+        logger.info( "Server version: {}", this.version );
     }
 
     @Override
@@ -79,37 +97,38 @@ public class DefaultRequestProcessor implements RequestProcessor {
         clientSession.close( immediately );
     }
 
-//    void resizeBuffer( int atLeast ) throws IOException {
-//        int newSize = writeBuffer.capacity() + Math.max( atLeast, writeBuffer.capacity() );
-//        ByteBuffer newWriteBuffer = ByteBuffer.allocateDirect( newSize );
-//        writeBuffer.flip();
-//        newWriteBuffer.put( writeBuffer );
-//        writeBuffer = newWriteBuffer;
-//    }
-
-    public int negotiatedVersion() {
-        return Math.min( init.getVersion(), version.getVersion() );
+    public NegotiatedVersion negotiatedVersion() {
+        return version;
     }
 
-    private void writePacket( PacketData packetData ) throws IOException {
-        int packetDataSize = packetData.getSize();
-        int packetSize = packetDataSize + 5;
+    @Override
+    public <T extends Request<T>> T newRequest( Class<T> type ) {
+        return packetDataFactory.newInstance( type );
+    }
+
+    @Override
+    public <T extends Request<T>> Future<Response<?>> request( Request<T> request ) throws IOException {
+        FuturePacketData<Response<?>> response =
+                responseProcessor.getFutureResponse( request.setId( requestIdFactory.nextId() ) );
+        logger.debug( "sending {}", request );
+        writePacket( request );
+        return response;
+    }
+
+    private void writePacket( PacketData<?> packetData ) throws IOException {
         try {
             writeLock.lock();
             // ensure size
-            writeBuffer.ensureSize( packetSize );
-            writeBuffer.putInt( packetDataSize + 1 );
-            writeBuffer.putPacketType( packetData.getPacketType() );
-            packetData.writeTo( writeBuffer );
-            writeBuffer.flip();
+            writeBuffer.putPacket( packetData );
 
             if ( logger.isTraceEnabled() ) {
+                writeBuffer.flip();
                 byte[] traceBytes = new byte[writeBuffer.remaining()];
                 writeBuffer.get( traceBytes );
                 logger.trace( "writeBuffer={}", traceBytes );
-                writeBuffer.flip();
             }
 
+            writeBuffer.flip();
             Channels.newChannel( this.sftpChannel.getInvertedIn() )
                     .write( writeBuffer.getByteBuffer() );
 
@@ -122,14 +141,7 @@ public class DefaultRequestProcessor implements RequestProcessor {
         }
     }
 
-    @Override
-    public Future<Response> request( Request request ) throws IOException {
-        FuturePacketData<Response> response = responseProcessor.getFutureResponse( request );
-        writePacket( request );
-        return response;
-    }
-
-    private static class FuturePacketData<T extends PacketData> implements Future<T> {
+    private static class FuturePacketData<T extends PacketData<?>> implements Future<T> {
         private Condition condition;
         private Lock lock;
         private T packetData;
@@ -199,17 +211,18 @@ public class DefaultRequestProcessor implements RequestProcessor {
     private class ResponseProcessor extends OutputStream {
         private ReentrantLock futureLock = new ReentrantLock();
         private FuturePacketData<Version> futureVersion;
-        private ConcurrentHashMap<Integer, FuturePacketData<Response>> responses;
+        private ConcurrentHashMap<Integer, FuturePacketData<Response<?>>> responses;
         private ByteBuffer readBuffer = ByteBuffer.allocateDirect( 65536 );
         private int currentPacketStart = readBuffer.position();
         private int currentPacketEnd = -1;
 
         public ResponseProcessor() {
             futureVersion = new FuturePacketData<>( futureLock );
+            responses = new ConcurrentHashMap<>();
         }
 
-        public FuturePacketData<Response> getFutureResponse( Request request ) {
-            FuturePacketData<Response> response = new FuturePacketData<>( futureLock );
+        public FuturePacketData<Response<?>> getFutureResponse( Request<?> request ) {
+            FuturePacketData<Response<?>> response = new FuturePacketData<>( futureLock );
             responses.put( request.getId(), response );
             return response;
         }
@@ -237,22 +250,25 @@ public class DefaultRequestProcessor implements RequestProcessor {
         }
 
         void processPacket( SftpProtocolBuffer buffer ) {
-            buffer.getInt(); // packet size not currently used
-            PacketType packetType = buffer.getPacketType();
-            PacketData packetData = packetDataFactory.newInstance( packetType )
+            // packet size not currently used as buffer is already set with the
+            // appropriate remaining()
+            buffer.getInt();
+
+            PacketData<?> packetData = packetDataFactory.newInstance( buffer.get() )
                     .parseFrom( buffer );
-            if ( packetType == PacketType.SSH_FXP_VERSION ) {
+            if ( packetData instanceof Version ) {
                 futureVersion.setPacketData( (Version)packetData );
             }
             else if ( packetData instanceof Response ) {
-                Response response = ((Response)packetData);
-                FuturePacketData<Response> futureResponse = responses.remove( response.getId() );
+                Response<?> response = ((Response<?>)packetData);
+                logger.debug( "recieved {}", response );
+                FuturePacketData<Response<?>> futureResponse = responses.remove( response.getId() );
                 if ( futureResponse != null ) {
                     futureResponse.setPacketData( response );
                 }
             }
             else {
-                throw new UnsupportedOperationException( "unexpected packet: " + packetType );
+                throw new UnsupportedOperationException( "unexpected packet: " + packetData.toString() );
             }
         }
 

@@ -1,21 +1,22 @@
 package org.apache.sshd.sftp;
 
 
-import java.io.IOException;
 import java.nio.charset.Charset;
 
 
 import org.apache.sshd.sftp.impl.SftpProtocolBuffer;
 
 
-public interface PacketData {
+public interface PacketData<T> {
     public static final Charset UTF_8 = Charset.forName( "UTF-8" );
 
     public PacketType getPacketType();
 
-    public int getSize();
+    public byte getPacketTypeByte();
+    
+    public T parseFrom( SftpProtocolBuffer buffer );
 
-    public PacketData parseFrom( SftpProtocolBuffer buffer );
+    public T setPacketTypeByte( byte packetDataTypeByte );
 
-    public void writeTo( SftpProtocolBuffer buffer ) throws IOException;
+    public void writeTo( SftpProtocolBuffer buffer );
 }

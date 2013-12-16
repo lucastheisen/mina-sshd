@@ -7,7 +7,9 @@ import java.util.concurrent.Future;
 
 
 public interface RequestProcessor extends Closeable {
-    public int negotiatedVersion();
+    public NegotiatedVersion negotiatedVersion();
 
-    public Future<? extends Response> request( Request request ) throws IOException;
+    public <T extends Request<T>> Future<Response<?>> request( Request<T> request ) throws IOException;
+
+    public <T extends Request<T>> T newRequest( Class<T> type );
 }
