@@ -1,5 +1,8 @@
 package org.apache.sshd.sftp.client.packetdata;
 
-public class RealPath {
 
+import org.apache.sshd.sftp.Request;
+
+
+public interface RealPath extends BasePath<RealPath>, Request<RealPath, Name> {
 }

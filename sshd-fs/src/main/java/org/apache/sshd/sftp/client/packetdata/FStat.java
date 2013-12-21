@@ -1,5 +1,8 @@
 package org.apache.sshd.sftp.client.packetdata;
 
-public class FStat {
 
+import org.apache.sshd.sftp.Request;
+
+
+public interface FStat extends BaseHandle<FStat>, Request<FStat, Attrs> {
 }

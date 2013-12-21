@@ -1,5 +1,8 @@
 package org.apache.sshd.sftp.client.packetdata;
 
-public class RmDir {
 
+import org.apache.sshd.sftp.Request;
+
+
+public interface RmDir extends BasePath<RmDir>, Request<RmDir, Status> {
 }

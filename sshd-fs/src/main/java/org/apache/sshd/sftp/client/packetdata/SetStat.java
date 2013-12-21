@@ -1,5 +1,8 @@
 package org.apache.sshd.sftp.client.packetdata;
 
-public class SetStat {
 
+import org.apache.sshd.sftp.Request;
+
+
+public interface SetStat extends Request<SetStat, Status>, BasePath<SetStat>, BaseAttrs<SetStat> {
 }

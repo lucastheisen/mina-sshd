@@ -1,5 +1,8 @@
 package org.apache.sshd.sftp.client.packetdata;
 
-public class Rename {
 
+import org.apache.sshd.sftp.Request;
+
+
+public interface Rename extends BasePathTargetPath<Rename>, Request<Rename, Status> {
 }

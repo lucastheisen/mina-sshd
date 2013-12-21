@@ -1,4 +1,4 @@
-package org.apache.sshd.sftp.impl;
+package org.apache.sshd.sftp.client.packetdata.impl;
 
 
 import java.util.Locale;
@@ -6,14 +6,18 @@ import java.util.Locale;
 
 import org.apache.sshd.sftp.PacketType;
 import org.apache.sshd.sftp.client.packetdata.Status;
+import org.apache.sshd.sftp.impl.SftpProtocolBuffer;
 
 
 public class DefaultPacketDataStatus
-        extends AbstractRequestOrResponse<Status>
+        extends AbstractPacketData<Status>
         implements Status {
     private Code code;
     private String message;
     private Locale messageLocale;
+    
+    protected DefaultPacketDataStatus() {
+    }
 
     @Override
     public void appendToStringBuilder( StringBuilder builder ) {
@@ -43,7 +47,7 @@ public class DefaultPacketDataStatus
     }
 
     @Override
-    public DefaultPacketDataStatus parseRequestFrom( SftpProtocolBuffer buffer ) {
+    public DefaultPacketDataStatus parseFrom( SftpProtocolBuffer buffer ) {
         code = Code.fromValue( buffer.getInt() );
         message = buffer.getString();
         messageLocale = Locale.forLanguageTag( buffer.getString() );
@@ -69,7 +73,7 @@ public class DefaultPacketDataStatus
     }
 
     @Override
-    public void writeRequestTo( SftpProtocolBuffer buffer ) {
+    public void writeTo( SftpProtocolBuffer buffer ) {
         buffer.putInt( code.getValue() );
         buffer.putString( message );
         buffer.putString( messageLocale.toLanguageTag() );

@@ -9,6 +9,8 @@ import org.apache.sshd.sftp.impl.SftpFileAttributes;
 
 
 public interface Name extends Response<Name> {
+    public void addNameEntry( String fileName, String longName, SftpFileAttributes fileAttributes );
+
     public int getCount();
 
     public List<NameEntry> getNameEntries();

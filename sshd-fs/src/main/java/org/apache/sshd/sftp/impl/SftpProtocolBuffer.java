@@ -5,9 +5,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 
 
-import org.apache.sshd.sftp.PacketData;
-
-
 public class SftpProtocolBuffer {
     private static final Charset UTF8 = Charset.forName( "UTF-8" );
 
@@ -71,6 +68,10 @@ public class SftpProtocolBuffer {
     public ByteBuffer getByteBuffer() {
         return buffer;
     }
+    
+    public byte[] getByteString() {
+        return newByteString( ensureStringBufferSize() );
+    }
 
     public int getInt() {
         return buffer.getInt();
@@ -88,42 +89,59 @@ public class SftpProtocolBuffer {
         return buffer.hasRemaining();
     }
 
-    private String newString( int size ) {
+    public Placeholder<Void> newSizePlaceholder() {
+        return new SizePlaceholder( buffer );
+    }
+    
+    private byte[] newByteString( int size ) {
         buffer.get( stringBuffer, 0, size );
-        return new String( stringBuffer, 0, size, UTF8 );
+        return stringBuffer;
     }
 
-    public void put( byte[] bytes ) {
+    private String newString( int size ) {
+        return new String( newByteString( size ), 0, size, UTF8 );
+    }
+
+    public SftpProtocolBuffer put( byte oneByte ) {
+        this.buffer.put( oneByte );
+        return this;
+    }
+
+    public SftpProtocolBuffer put( byte[] bytes ) {
         this.buffer.put( bytes );
+        return this;
     }
 
-    public void put( SftpProtocolBuffer buffer ) {
+    public SftpProtocolBuffer put( SftpProtocolBuffer buffer ) {
         this.buffer.put( buffer.buffer );
+        return this;
     }
 
-    public void putInt( int value ) {
-        buffer.putInt( value );
+    public SftpProtocolBuffer put( Placeholder<?> placeholder ) {
+        placeholder.setPosition();
+        return this;
     }
 
-    public void putLong( long value ) {
-        buffer.putLong( value );
-    }
-
-    public void putPacket( PacketData<?> packetData ) {
-        int start = buffer.position();
-        int packetStart = start + 4;
-        buffer.position( packetStart );
-        buffer.put( packetData.getPacketTypeByte() );
-        packetData.writeTo( this );
-        buffer.putInt( start, buffer.position() - packetStart );
-    }
-
-    public void putString( String value ) {
-        int size = value.length();
-        buffer.putInt( size );
-        if ( size > 0 ) {
-            buffer.put( value.getBytes( UTF8 ) );
+    public SftpProtocolBuffer putByteString( byte[] value ) {
+        buffer.putInt( value.length );
+        if ( value.length > 0 ) {
+            buffer.put( value );
         }
+        return this;
+    }
+
+    public SftpProtocolBuffer putInt( int value ) {
+        buffer.putInt( value );
+        return this;
+    }
+
+    public SftpProtocolBuffer putLong( long value ) {
+        buffer.putLong( value );
+        return this;
+    }
+
+    public SftpProtocolBuffer putString( String value ) {
+        return putByteString( value.getBytes( UTF8 ) );
     }
 
     public int remaining() {
@@ -132,5 +150,32 @@ public class SftpProtocolBuffer {
 
     public static SftpProtocolBuffer wrap( ByteBuffer buffer ) {
         return new SftpProtocolBuffer( buffer );
+    }
+
+    public static interface Placeholder<T> {
+        public void setPosition();
+
+        public void setValue( T value );
+    }
+
+    public static class SizePlaceholder implements Placeholder<Void> {
+        private ByteBuffer buffer;
+        private int position;
+        private int sizeStart;
+
+        private SizePlaceholder( ByteBuffer buffer ) {
+            this.buffer = buffer;
+        }
+
+        public void setPosition() {
+            this.position = buffer.position();
+            this.sizeStart = this.position + 4;
+            buffer.position( this.sizeStart );
+        }
+
+        @Override
+        public void setValue( Void value ) {
+            buffer.putInt( position, buffer.position() - sizeStart );
+        }
     }
 }

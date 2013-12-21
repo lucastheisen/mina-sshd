@@ -25,8 +25,13 @@ import org.apache.sshd.sftp.Request;
 import org.apache.sshd.sftp.RequestIdFactory;
 import org.apache.sshd.sftp.RequestProcessor;
 import org.apache.sshd.sftp.Response;
+import org.apache.sshd.sftp.StatusException;
+import org.apache.sshd.sftp.UnexpectedPacketDataException;
 import org.apache.sshd.sftp.client.packetdata.Init;
+import org.apache.sshd.sftp.client.packetdata.Status;
 import org.apache.sshd.sftp.client.packetdata.Version;
+import org.apache.sshd.sftp.client.packetdata.impl.DefaultPacketDataFactory;
+import org.apache.sshd.sftp.impl.SftpProtocolBuffer.Placeholder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,7 +40,6 @@ public class DefaultRequestProcessor implements RequestProcessor {
     private static Logger logger = LoggerFactory.getLogger( DefaultRequestProcessor.class );
     private static final int CLIENT_SFTP_PROTOCOL_VERSION = 3;
 
-    private ClientSession clientSession;
     private PacketDataFactory packetDataFactory;
     private RequestIdFactory requestIdFactory;
     private ResponseProcessor responseProcessor;
@@ -57,7 +61,6 @@ public class DefaultRequestProcessor implements RequestProcessor {
     public DefaultRequestProcessor( ClientSession clientSession,
             PacketDataFactory packetDataFactory, RequestIdFactory requestIdFactory )
             throws IOException, InterruptedException, ExecutionException {
-        this.clientSession = clientSession;
         this.packetDataFactory = packetDataFactory;
         this.requestIdFactory = requestIdFactory;
         this.responseProcessor = new ResponseProcessor();
@@ -82,7 +85,7 @@ public class DefaultRequestProcessor implements RequestProcessor {
         // initialized the protocol
         Init init = packetDataFactory.newInstance( Init.class )
                 .setVersion( CLIENT_SFTP_PROTOCOL_VERSION );
-        writePacket( init );
+        writeInit( init );
         Version version = responseProcessor.getVersion().get();
         this.version = new DefaultNegotiatedVersion( init, version );
         logger.info( "Server version: {}", this.version );
@@ -90,11 +93,11 @@ public class DefaultRequestProcessor implements RequestProcessor {
 
     @Override
     public void close() throws IOException {
-        clientSession.close( true );
+        sftpChannel.close( true );
     }
 
     public void close( boolean immediately ) {
-        clientSession.close( immediately );
+        sftpChannel.close( immediately );
     }
 
     public NegotiatedVersion negotiatedVersion() {
@@ -102,51 +105,82 @@ public class DefaultRequestProcessor implements RequestProcessor {
     }
 
     @Override
-    public <T extends Request<T>> T newRequest( Class<T> type ) {
+    public <S extends Response<S>, T extends Request<T, S>> T newRequest( Class<T> type ) {
         return packetDataFactory.newInstance( type );
     }
 
     @Override
-    public <T extends Request<T>> Future<Response<?>> request( Request<T> request ) throws IOException {
-        FuturePacketData<Response<?>> response =
-                responseProcessor.getFutureResponse( request.setId( requestIdFactory.nextId() ) );
+    public <S extends Response<S>, T extends Request<T, S>> Future<S> request( Request<T, S> request )
+            throws IOException {
+        int requestId = requestIdFactory.nextId();
+        Future<S> response =
+                responseProcessor.getFutureResponse( requestId, request.expectedResponseType() );
         logger.debug( "sending {}", request );
-        writePacket( request );
+        writeRequest( request, requestId );
         return response;
     }
 
-    private void writePacket( PacketData<?> packetData ) throws IOException {
+    private <S extends Response<S>, T extends Request<T, S>> void writeRequest(
+            Request<T, S> request, int requestId ) throws IOException {
         try {
             writeLock.lock();
-            // ensure size
-            writeBuffer.putPacket( packetData );
+            Placeholder<Void> size = writeBuffer.newSizePlaceholder();
+            writeBuffer.put( size )
+                    .put( request.getPacketTypeByte() )
+                    .putInt( requestId );
+            request.writeTo( writeBuffer );
+            size.setValue( null );
 
-            if ( logger.isTraceEnabled() ) {
-                writeBuffer.flip();
-                byte[] traceBytes = new byte[writeBuffer.remaining()];
-                writeBuffer.get( traceBytes );
-                logger.trace( "writeBuffer={}", traceBytes );
-            }
-
-            writeBuffer.flip();
-            Channels.newChannel( this.sftpChannel.getInvertedIn() )
-                    .write( writeBuffer.getByteBuffer() );
-
-            this.sftpChannel.getInvertedIn().flush();
-
-            writeBuffer.clear();
+            writePacket();
         }
         finally {
             writeLock.unlock();
         }
     }
 
-    private static class FuturePacketData<T extends PacketData<?>> implements Future<T> {
+    private void writeInit( Init init ) throws IOException {
+        try {
+            writeLock.lock();
+            Placeholder<Void> size = writeBuffer.newSizePlaceholder();
+            writeBuffer.put( size )
+                    .put( init.getPacketTypeByte() );
+            init.writeTo( writeBuffer );
+            size.setValue( null );
+
+            writePacket();
+        }
+        finally {
+            writeLock.unlock();
+        }
+    }
+
+    private void writePacket() throws IOException {
+        if ( logger.isTraceEnabled() ) {
+            writeBuffer.flip();
+            byte[] traceBytes = new byte[writeBuffer.remaining()];
+            writeBuffer.get( traceBytes );
+            logger.trace( "writeBuffer={}", traceBytes );
+        }
+
+        writeBuffer.flip();
+        Channels.newChannel( this.sftpChannel.getInvertedIn() )
+                .write( writeBuffer.getByteBuffer() );
+
+        this.sftpChannel.getInvertedIn().flush();
+
+        writeBuffer.clear();
+    }
+
+    public static class FuturePacketData<T extends PacketData<T>> implements Future<T> {
         private Condition condition;
+        private boolean done = false;
+        private ExecutionException executionException;
+        private Class<T> expectedType;
         private Lock lock;
         private T packetData;
 
-        private FuturePacketData( Lock lock ) {
+        private FuturePacketData( Class<T> expectedType, Lock lock ) {
+            this.expectedType = expectedType;
             this.lock = lock;
             this.condition = lock.newCondition();
         }
@@ -165,7 +199,7 @@ public class DefaultRequestProcessor implements RequestProcessor {
 
         @Override
         public boolean isDone() {
-            return packetData != null;
+            return done;
         }
 
         @Override
@@ -178,6 +212,9 @@ public class DefaultRequestProcessor implements RequestProcessor {
                 finally {
                     lock.unlock();
                 }
+            }
+            if ( executionException != null ) {
+                throw executionException;
             }
             return packetData;
         }
@@ -193,11 +230,26 @@ public class DefaultRequestProcessor implements RequestProcessor {
                     lock.unlock();
                 }
             }
+            if ( executionException != null ) {
+                throw executionException;
+            }
             return packetData;
         }
 
-        private void setPacketData( T packetData ) {
-            this.packetData = packetData;
+        private void setPacketData( PacketData<?> packetData ) {
+            if ( expectedType.isAssignableFrom( packetData.getClass() ) ) {
+                this.packetData = expectedType.cast( packetData );
+            }
+            else if ( Status.class.isAssignableFrom( packetData.getClass() ) ) {
+                executionException = new ExecutionException(
+                        new StatusException( (Status)packetData ) );
+            }
+            else {
+                executionException = new ExecutionException(
+                        new UnexpectedPacketDataException( packetData ) );
+            }
+            done = true;
+
             try {
                 lock.lock();
                 condition.signalAll();
@@ -211,19 +263,19 @@ public class DefaultRequestProcessor implements RequestProcessor {
     private class ResponseProcessor extends OutputStream {
         private ReentrantLock futureLock = new ReentrantLock();
         private FuturePacketData<Version> futureVersion;
-        private ConcurrentHashMap<Integer, FuturePacketData<Response<?>>> responses;
+        private ConcurrentHashMap<Integer, FuturePacketData<? extends PacketData<?>>> responses;
         private ByteBuffer readBuffer = ByteBuffer.allocateDirect( 65536 );
         private int currentPacketStart = readBuffer.position();
         private int currentPacketEnd = -1;
 
         public ResponseProcessor() {
-            futureVersion = new FuturePacketData<>( futureLock );
+            futureVersion = new FuturePacketData<>( Version.class, futureLock );
             responses = new ConcurrentHashMap<>();
         }
 
-        public FuturePacketData<Response<?>> getFutureResponse( Request<?> request ) {
-            FuturePacketData<Response<?>> response = new FuturePacketData<>( futureLock );
-            responses.put( request.getId(), response );
+        public <S extends Response<S>> Future<S> getFutureResponse( int requestId, Class<S> responseType ) {
+            FuturePacketData<S> response = new FuturePacketData<>( responseType, futureLock );
+            responses.put( requestId, response );
             return response;
         }
 
@@ -254,17 +306,18 @@ public class DefaultRequestProcessor implements RequestProcessor {
             // appropriate remaining()
             buffer.getInt();
 
-            PacketData<?> packetData = packetDataFactory.newInstance( buffer.get() )
-                    .parseFrom( buffer );
+            PacketData<?> packetData = packetDataFactory.newInstance( buffer.get() );
             if ( packetData instanceof Version ) {
+                packetData.parseFrom( buffer );
                 futureVersion.setPacketData( (Version)packetData );
             }
             else if ( packetData instanceof Response ) {
-                Response<?> response = ((Response<?>)packetData);
-                logger.debug( "recieved {}", response );
-                FuturePacketData<Response<?>> futureResponse = responses.remove( response.getId() );
+                int requestId = buffer.getInt();
+                packetData.parseFrom( buffer );
+                logger.debug( "recieved {}", packetData );
+                FuturePacketData<?> futureResponse = responses.remove( requestId );
                 if ( futureResponse != null ) {
-                    futureResponse.setPacketData( response );
+                    futureResponse.setPacketData( packetData );
                 }
             }
             else {

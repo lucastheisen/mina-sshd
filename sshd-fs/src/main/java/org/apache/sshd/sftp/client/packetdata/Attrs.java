@@ -1,5 +1,6 @@
 package org.apache.sshd.sftp.client.packetdata;
 
-public class Attrs {
+import org.apache.sshd.sftp.Response;
 
+public interface Attrs extends BaseAttrs<Attrs>, Response<Attrs> {
 }

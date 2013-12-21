@@ -1,5 +1,11 @@
 package org.apache.sshd.sftp.client.packetdata;
 
-public class Write {
 
+import org.apache.sshd.sftp.Request;
+
+
+public interface Write extends BaseHandleOffset<Write>, Request<Write, Status> {
+    public byte[] getData();
+
+    public Write setData( byte[] data );
 }

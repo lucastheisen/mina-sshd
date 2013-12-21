@@ -1,5 +1,8 @@
 package org.apache.sshd.sftp.client.packetdata;
 
-public class Remove {
 
+import org.apache.sshd.sftp.Request;
+
+
+public interface Remove extends BasePath<Remove>, Request<Remove, Status> {
 }
