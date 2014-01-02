@@ -64,6 +64,7 @@ import org.apache.sftp.protocol.packetdata.Stat;
 import org.apache.sftp.protocol.packetdata.Status;
 import org.apache.sftp.protocol.packetdata.SymLink;
 import org.apache.sftp.protocol.packetdata.Write;
+import org.apache.sftp.protocol.packetdata.openssh.PosixRename;
 import org.apache.sftp.test.TestUtil;
 import org.apache.sshd.ClientSession;
 import org.junit.After;
@@ -444,6 +445,47 @@ public class DefaultRequestProcessorTest {
             logger.error( "fail:", e );
             fail( e.getMessage() );
         }
+    }
+
+    @Test
+    public void testPosixRename() {
+        String testFileString = "file.txt";
+        String testFileNewString = "file_new.txt";
+        Path testFile = testDir.resolve( testFileString );
+        Path testFileNew = testDir.resolve( testFileNewString );
+
+        String path = sshTempDirString + "/" + testDirString + "/" + testFileString;
+        String newPath = sshTempDirString + "/" + testDirString + "/" + testFileNewString;
+        try (CloseableHandle handle = requestProcessor.requestCloseable( requestProcessor.newRequest( Open.class )
+                .setPath( path )
+                .setPFlags( EnumSet.of( PFlag.SSH_FXF_CREAT ) )
+                .setFileAttributes( new SftpFileAttributes()
+                        .setPermissions( EnumSet.of( Permission.S_IRUSR ) )
+                        .setSize( 10 )
+                        .setTimes( FileTime.fromMillis( 0 ), FileTime.fromMillis( 0 ) )
+                        .setUidGid( 100, 100 )
+                ) )) {
+            assertNotNull( handle.getHandle() );
+        }
+        catch ( StatusException | UnexpectedPacketDataException | IOException | InterruptedException | ExecutionException e ) {
+            logger.error( "fail:", e );
+            fail( e.getMessage() );
+        }
+        assertTrue( Files.exists( testFile ) );
+        assertFalse( Files.exists( testFileNew ) );
+
+        try {
+            assertEquals( Status.Code.SSH_FX_OK,
+                    requestProcessor.request( requestProcessor.newRequest( PosixRename.class )
+                            .setPath( path )
+                            .setTargetPath( newPath ) ).get().getCode() );
+        }
+        catch ( IOException | InterruptedException | ExecutionException e ) {
+            logger.error( "fail:", e );
+            fail( e.getMessage() );
+        }
+        assertFalse( Files.exists( testFile ) );
+        assertTrue( Files.exists( testFileNew ) );
     }
 
     @Test

@@ -6,6 +6,7 @@ import org.apache.sftp.protocol.Request;
 import org.apache.sftp.protocol.Response;
 
 
-public interface Extended<T, S extends Response<S>> extends PacketData<T>, Request<T, S> {
-    public String getName();
+public interface Extended<T extends Extended<T, S>, S extends Response<S>>
+        extends PacketData<T>, Request<T, S> {
+    public String getExtendedRequest();
 }

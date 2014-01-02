@@ -10,13 +10,17 @@ import org.apache.sftp.protocol.packetdata.openssh.PosixRename;
 public class DefaultPosixRename extends AbstractExtendedPath<PosixRename, Status> implements PosixRename {
     private String targetPath;
 
+    protected void appendToStringBuilder2( StringBuilder builder ) {
+        builder.append( ",'targetPath'='" ).append( targetPath ).append( "'" );
+    }
+
     @Override
     public Class<Status> expectedResponseType() {
         return Status.class;
     }
 
     @Override
-    public String getName() {
+    public String getExtendedRequest() {
         return "posix-rename@openssh.com";
     }
 

@@ -8,7 +8,7 @@ import org.apache.sftp.protocol.impl.SftpProtocolBuffer;
 
 
 public interface PacketData<T> {
-    public static final Charset UTF_8 = Charset.forName( "UTF-8" );
+    public static final Charset UTF8 = Charset.forName( "UTF-8" );
 
     public PacketType getPacketType();
 

@@ -13,6 +13,15 @@ public abstract class AbstractExtendedPath<T extends Extended<T, S>, S extends R
         implements BaseExtendedPath<T, S> {
     private String path;
 
+    protected void appendToStringBuilder( StringBuilder builder ) {
+        builder.append( ",'extendedRequest'='" ).append( getExtendedRequest() )
+                .append( "','path'='" ).append( path ).append( "'" );
+        appendToStringBuilder2( builder );
+    }
+
+    protected void appendToStringBuilder2( StringBuilder builder ) {
+    }
+
     @Override
     public String getPath() {
         return path;

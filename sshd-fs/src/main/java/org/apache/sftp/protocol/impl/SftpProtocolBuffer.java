@@ -175,7 +175,8 @@ public class SftpProtocolBuffer {
 
         @Override
         public void setValue( Void value ) {
-            buffer.putInt( position, buffer.position() - sizeStart );
+            int size = buffer.position() - sizeStart;
+            buffer.putInt( position, size );
         }
     }
 }

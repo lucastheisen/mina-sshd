@@ -1,17 +1,24 @@
 package org.apache.sftp.protocol.packetdata.impl;
 
 
+import java.util.HashMap;
+import java.util.Map;
+
+
 import org.apache.sftp.protocol.PacketData;
 import org.apache.sftp.protocol.PacketDataFactory;
 import org.apache.sftp.protocol.PacketType;
+import org.apache.sftp.protocol.Response;
 import org.apache.sftp.protocol.packetdata.Attrs;
 import org.apache.sftp.protocol.packetdata.Close;
 import org.apache.sftp.protocol.packetdata.Data;
 import org.apache.sftp.protocol.packetdata.Extended;
+import org.apache.sftp.protocol.packetdata.ExtendedImplementation;
 import org.apache.sftp.protocol.packetdata.ExtendedReply;
 import org.apache.sftp.protocol.packetdata.FSetStat;
 import org.apache.sftp.protocol.packetdata.FStat;
 import org.apache.sftp.protocol.packetdata.Handle;
+import org.apache.sftp.protocol.packetdata.Implementation;
 import org.apache.sftp.protocol.packetdata.Init;
 import org.apache.sftp.protocol.packetdata.LStat;
 import org.apache.sftp.protocol.packetdata.MkDir;
@@ -31,218 +38,148 @@ import org.apache.sftp.protocol.packetdata.Status;
 import org.apache.sftp.protocol.packetdata.SymLink;
 import org.apache.sftp.protocol.packetdata.Version;
 import org.apache.sftp.protocol.packetdata.Write;
+import org.apache.sftp.protocol.packetdata.openssh.PosixRename;
+import org.apache.sftp.protocol.packetdata.openssh.impl.DefaultPosixRename;
 
 
 public class DefaultPacketDataFactory implements PacketDataFactory {
-    @Override
-    @SuppressWarnings("unchecked")
-    public <T extends PacketData<T>> T newInstance( byte packetTypeByte ) {
-        PacketType packetType = PacketType.fromValue( packetTypeByte );
-        if ( packetType == null ) {
-            return (T)new DefaultRaw( packetTypeByte );
-        }
+    private Map<Object, Implementation<?>> implementations;
 
+    public DefaultPacketDataFactory() {
+        this.implementations = new HashMap<>();
+
+        registerImplementation( Init.class, DefaultInit.class );
+        registerImplementation( Version.class, DefaultVersion.class );
+        registerImplementation( Handle.class, DefaultHandle.class );
+        registerImplementation( OpenDir.class, DefaultOpenDir.class );
+        registerImplementation( Status.class, DefaultStatus.class );
+        registerImplementation( Close.class, DefaultClose.class );
+        registerImplementation( ReadDir.class, DefaultReadDir.class );
+        registerImplementation( Name.class, DefaultName.class );
+        registerImplementation( Stat.class, DefaultStat.class );
+        registerImplementation( Attrs.class, DefaultAttrs.class );
+        registerImplementation( Open.class, DefaultOpen.class );
+        registerImplementation( Write.class, DefaultWrite.class );
+        registerImplementation( Read.class, DefaultRead.class );
+        registerImplementation( Data.class, DefaultData.class );
+        registerImplementation( Rename.class, DefaultRename.class );
+        registerImplementation( SymLink.class, DefaultSymLink.class );
+        registerImplementation( FSetStat.class, DefaultFSetStat.class );
+        registerImplementation( LStat.class, DefaultLStat.class );
+        registerImplementation( FStat.class, DefaultFStat.class );
+        registerImplementation( MkDir.class, DefaultMkDir.class );
+        registerImplementation( RmDir.class, DefaultRmDir.class );
+        registerImplementation( ReadLink.class, DefaultReadLink.class );
+        registerImplementation( RealPath.class, DefaultRealPath.class );
+        registerImplementation( Remove.class, DefaultRemove.class );
+        registerImplementation( SetStat.class, DefaultSetStat.class );
+
+        registerExtendedImplementation( PosixRename.class, DefaultPosixRename.class,
+                "posix-rename@openssh.com", null, null );
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public <T extends Extended<T, S>, S extends Response<S>> T newExtended( String extendedRequest ) {
+        if ( implementations.containsKey( extendedRequest ) ) {
+            return (T)newInstance( implementations.get( extendedRequest ) );
+        }
+        throw new UnsupportedOperationException( extendedRequest + " not implemented" );
+    }
+
+    private <T extends PacketData<T>> Implementation<T> newImplementation(
+            final Class<T> interfaceType, final Class<? extends T> implementationType ) {
+        return new Implementation<T>() {
+            @Override
+            public Class<? extends T> getImplementationType() {
+                return implementationType;
+            }
+
+            @Override
+            public Class<T> getInterfaceType() {
+                return interfaceType;
+            }
+        };
+    }
+
+    private <T extends PacketData<T>, S extends T> T newInstance( Implementation<T> implementation ) {
         try {
-            return newInstance( (Class<T>)packetType.getInterface() );
+            return implementation.getInterfaceType().cast( implementation.getImplementationType().newInstance() );
         }
-        catch ( UnsupportedOperationException e ) {
-            return (T)new DefaultRaw( packetTypeByte );
+        catch ( InstantiationException | IllegalAccessException e ) {
+            throw new UnsupportedOperationException(
+                    "Unable to create " + implementation.getInterfaceType().getName(), e );
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public <T extends PacketData<T>> T newPacketData( PacketType packetType ) {
+        return newPacketData( (Class<T>)packetType.getInterface() );
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T extends PacketData<T>> T newInstance( Class<T> interfaceType ) {
-        // TODO: prioritize most common first to reduce checks
-        if ( Init.class.equals( interfaceType ) ) {
-            return (T)newInit();
+    public <T extends PacketData<T>> T newPacketData( Class<T> interfaceType ) {
+        if ( interfaceType.isAssignableFrom( Extended.class ) ||
+                interfaceType.isAssignableFrom( ExtendedReply.class ) ) {
+            if ( implementations.containsKey( interfaceType ) ) {
+                return (T)newInstance( implementations.get( interfaceType ) );
+            }
         }
-        else if ( Version.class.equals( interfaceType ) ) {
-            return (T)newVersion();
+        else {
+            if ( implementations.containsKey( interfaceType ) ) {
+                return (T)newInstance( implementations.get( interfaceType ) );
+            }
         }
-        else if ( Handle.class.equals( interfaceType ) ) {
-            return (T)newHandle();
-        }
-        else if ( OpenDir.class.equals( interfaceType ) ) {
-            return (T)newOpenDir();
-        }
-        else if ( Status.class.equals( interfaceType ) ) {
-            return (T)newStatus();
-        }
-        else if ( Close.class.equals( interfaceType ) ) {
-            return (T)newClose();
-        }
-        else if ( ReadDir.class.equals( interfaceType ) ) {
-            return (T)newReadDir();
-        }
-        else if ( Name.class.equals( interfaceType ) ) {
-            return (T)newName();
-        }
-        else if ( Stat.class.equals( interfaceType ) ) {
-            return (T)newStat();
-        }
-        else if ( Attrs.class.equals( interfaceType ) ) {
-            return (T)newAttrs();
-        }
-        else if ( Open.class.equals( interfaceType ) ) {
-            return (T)newOpen();
-        }
-        else if ( Write.class.equals( interfaceType ) ) {
-            return (T)newWrite();
-        }
-        else if ( Read.class.equals( interfaceType ) ) {
-            return (T)newRead();
-        }
-        else if ( Data.class.equals( interfaceType ) ) {
-            return (T)newData();
-        }
-        else if ( Rename.class.equals( interfaceType ) ) {
-            return (T)newRename();
-        }
-        else if ( SymLink.class.equals( interfaceType ) ) {
-            return (T)newSymLink();
-        }
-        else if ( FSetStat.class.equals( interfaceType ) ) {
-            return (T)newFSetStat();
-        }
-        else if ( LStat.class.equals( interfaceType ) ) {
-            return (T)newLStat();
-        }
-        else if ( FStat.class.equals( interfaceType ) ) {
-            return (T)newFStat();
-        }
-        else if ( MkDir.class.equals( interfaceType ) ) {
-            return (T)newMkDir();
-        }
-        else if ( RmDir.class.equals( interfaceType ) ) {
-            return (T)newRmDir();
-        }
-        else if ( ReadLink.class.equals( interfaceType ) ) {
-            return (T)newReadLink();
-        }
-        else if ( RealPath.class.equals( interfaceType ) ) {
-            return (T)newRealPath();
-        }
-        else if ( Remove.class.equals( interfaceType ) ) {
-            return (T)newRemove();
-        }
-        else if ( SetStat.class.equals( interfaceType ) ) {
-            return (T)newSetStat();
-        }
-        else if ( Extended.class.isAssignableFrom( interfaceType ) ) {
-            return newExtended( interfaceType );
-        }
-        else if ( ExtendedReply.class.isAssignableFrom( interfaceType ) ) {
-            return newExtendedReply( interfaceType );
-        }
-        throw new UnsupportedOperationException( interfaceType.getName() + " not yet implemented" );
+        throw new UnsupportedOperationException( interfaceType.getName() + " not implemented" );
     }
 
-    public Attrs newAttrs() {
-        return new DefaultAttrs();
+    private <T extends Extended<T, S>, S extends Response<S>, R extends ExtendedReply<R>> void registerExtendedImplementation(
+            final Class<T> interfaceType, final Class<? extends T> implementationType, final String extendedRequest,
+            final Class<R> extendedReplyInterfaceType, final Class<? extends R> extendedReplyImplementationType ) {
+        registerExtendedImplementation( new ExtendedImplementation<T, S>() {
+            @Override
+            public Class<? extends T> getImplementationType() {
+                return implementationType;
+            }
+
+            @Override
+            public Class<T> getInterfaceType() {
+                return interfaceType;
+            }
+
+            @Override
+            public String getExtendedRequest() {
+                return extendedRequest;
+            }
+
+            @SuppressWarnings("unchecked")
+            @Override
+            public Implementation<S> getExtendedReplyImplementation() {
+                return (Implementation<S>)newImplementation( extendedReplyInterfaceType, extendedReplyImplementationType );
+            }
+        } );
     }
 
-    public Close newClose() {
-        return new DefaultClose();
+    private <T extends Extended<T, S>, S extends Response<S>> void registerExtendedImplementation(
+            ExtendedImplementation<T, S> extension ) {
+        this.implementations.put( extension.getExtendedRequest(), extension );
+        this.implementations.put( extension.getInterfaceType(), extension );
+
+        Implementation<S> extendedReply = extension.getExtendedReplyImplementation();
+        if ( extendedReply != null ) {
+            this.implementations.put( extendedReply.getInterfaceType(), extendedReply );
+        }
     }
 
-    public Data newData() {
-        return new DefaultData();
+    private <T extends PacketData<T>> void registerImplementation(
+            final Class<T> interfaceType, final Class<? extends T> implementationType ) {
+        registerImplementation( newImplementation( interfaceType, implementationType ) );
     }
 
-    public <T extends PacketData<T>> T newExtended( Class<T> interfaceType ) {
-        throw new UnsupportedOperationException( interfaceType.getName() + " not yet implemented" );
-    }
-
-    public <T extends PacketData<T>> T newExtendedReply( Class<T> interfaceType ) {
-        throw new UnsupportedOperationException( interfaceType.getName() + " not yet implemented" );
-    }
-
-    public FSetStat newFSetStat() {
-        return new DefaultFSetStat();
-    }
-
-    public FStat newFStat() {
-        return new DefaultFStat();
-    }
-
-    public Handle newHandle() {
-        return new DefaultHandle();
-    }
-
-    public Init newInit() {
-        return new DefaultInit();
-    }
-
-    public LStat newLStat() {
-        return new DefaultLStat();
-    }
-
-    public MkDir newMkDir() {
-        return new DefaultMkDir();
-    }
-
-    public Name newName() {
-        return new DefaultName();
-    }
-
-    public Open newOpen() {
-        return new DefaultOpen();
-    }
-
-    public OpenDir newOpenDir() {
-        return new DefaultOpenDir();
-    }
-
-    public Read newRead() {
-        return new DefaultRead();
-    }
-
-    public ReadDir newReadDir() {
-        return new DefaultReadDir();
-    }
-
-    public ReadLink newReadLink() {
-        return new DefaultReadLink();
-    }
-
-    public RealPath newRealPath() {
-        return new DefaultRealPath();
-    }
-
-    public Remove newRemove() {
-        return new DefaultRemove();
-    }
-
-    public Rename newRename() {
-        return new DefaultRename();
-    }
-
-    public RmDir newRmDir() {
-        return new DefaultRmDir();
-    }
-
-    public SetStat newSetStat() {
-        return new DefaultSetStat();
-    }
-
-    public Stat newStat() {
-        return new DefaultStat();
-    }
-
-    public Status newStatus() {
-        return new DefaultStatus();
-    }
-
-    public SymLink newSymLink() {
-        return new DefaultSymLink();
-    }
-
-    public Version newVersion() {
-        return new DefaultVersion();
-    }
-
-    public Write newWrite() {
-        return new DefaultWrite();
+    private <T extends PacketData<T>> void registerImplementation(
+            Implementation<T> implementation ) {
+        implementations.put( implementation.getInterfaceType(), implementation );
     }
 }

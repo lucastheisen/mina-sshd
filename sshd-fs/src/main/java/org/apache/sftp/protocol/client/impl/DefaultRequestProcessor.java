@@ -20,6 +20,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.apache.sftp.protocol.NegotiatedVersion;
 import org.apache.sftp.protocol.PacketData;
 import org.apache.sftp.protocol.PacketDataFactory;
+import org.apache.sftp.protocol.PacketType;
 import org.apache.sftp.protocol.Request;
 import org.apache.sftp.protocol.Response;
 import org.apache.sftp.protocol.StatusException;
@@ -30,8 +31,10 @@ import org.apache.sftp.protocol.client.RequestProcessor;
 import org.apache.sftp.protocol.impl.DefaultNegotiatedVersion;
 import org.apache.sftp.protocol.impl.SftpProtocolBuffer;
 import org.apache.sftp.protocol.impl.SftpProtocolBuffer.Placeholder;
+import org.apache.sftp.protocol.packetdata.Extended;
 import org.apache.sftp.protocol.packetdata.Handle;
 import org.apache.sftp.protocol.packetdata.Init;
+import org.apache.sftp.protocol.packetdata.Raw;
 import org.apache.sftp.protocol.packetdata.Status;
 import org.apache.sftp.protocol.packetdata.Version;
 import org.apache.sftp.protocol.packetdata.impl.DefaultPacketDataFactory;
@@ -89,7 +92,7 @@ public class DefaultRequestProcessor implements RequestProcessor {
         }
 
         // initialized the protocol
-        Init init = packetDataFactory.newInstance( Init.class )
+        Init init = packetDataFactory.newPacketData( Init.class )
                 .setVersion( CLIENT_SFTP_PROTOCOL_VERSION );
         writeInit( init );
         Version version = responseProcessor.getVersion().get();
@@ -120,7 +123,7 @@ public class DefaultRequestProcessor implements RequestProcessor {
 
     @Override
     public <S extends Response<S>, T extends Request<T, S>> T newRequest( Class<T> type ) {
-        return packetDataFactory.newInstance( type );
+        return packetDataFactory.newPacketData( type );
     }
 
     @Override
@@ -135,7 +138,8 @@ public class DefaultRequestProcessor implements RequestProcessor {
     }
 
     @Override
-    public <T extends Request<T, Handle>> CloseableHandle requestCloseable( Request<T, Handle> request ) throws IOException, InterruptedException, StatusException, ExecutionException, UnexpectedPacketDataException {
+    public <T extends Request<T, Handle>> CloseableHandle requestCloseable( Request<T, Handle> request )
+            throws IOException, InterruptedException, StatusException, ExecutionException, UnexpectedPacketDataException {
         try {
             Handle handle = request( request ).get();
             return new DefaultCloseableHandle( this, handle );
@@ -162,7 +166,11 @@ public class DefaultRequestProcessor implements RequestProcessor {
             writeBuffer.put( size )
                     .put( request.getPacketTypeByte() )
                     .putInt( requestId );
+            if ( request instanceof Extended ) {
+                writeBuffer.putString( ((Extended<?, ?>)request).getExtendedRequest() );
+            }
             request.writeTo( writeBuffer );
+            // null is correct here! Look at the implementation
             size.setValue( null );
 
             writePacket();
@@ -228,6 +236,10 @@ public class DefaultRequestProcessor implements RequestProcessor {
         public boolean cancel( boolean mayInterruptIfRunning ) {
             // TODO implement cancel
             throw new UnsupportedOperationException( "not yet implemented" );
+        }
+
+        public Class<T> getExpectedType() {
+            return expectedType;
         }
 
         @Override
@@ -341,26 +353,35 @@ public class DefaultRequestProcessor implements RequestProcessor {
         }
 
         void processPacket( SftpProtocolBuffer buffer ) {
-            // packet size not currently used as buffer is already set with the
-            // appropriate remaining()
-            buffer.getInt();
-
-            PacketData<?> packetData = packetDataFactory.newInstance( buffer.get() );
-            if ( packetData instanceof Version ) {
-                packetData.parseFrom( buffer );
-                futureVersion.setPacketData( (Version)packetData );
-            }
-            else if ( packetData instanceof Response ) {
-                int requestId = buffer.getInt();
-                packetData.parseFrom( buffer );
-                logger.debug( "recieved {}", packetData );
-                FuturePacketData<?> futureResponse = responses.remove( requestId );
-                if ( futureResponse != null ) {
-                    futureResponse.setPacketData( packetData );
-                }
+            // decode prefix information
+            @SuppressWarnings("unused")
+            int packetSize = buffer.getInt();
+            byte packetTypeByte = buffer.get();
+            PacketType packetType = PacketType.fromValue( packetTypeByte );
+            if ( packetType == PacketType.SSH_FXP_VERSION ) {
+                futureVersion.setPacketData( packetDataFactory.newPacketData( packetType )
+                        .parseFrom( buffer ) );
             }
             else {
-                throw new UnsupportedOperationException( "unexpected packet: " + packetData.toString() );
+                int requestId = buffer.getInt();
+                FuturePacketData<?> futureResponse = responses.remove( requestId );
+                if ( futureResponse != null ) {
+                    PacketData<? extends PacketData<?>> packetData = null;
+                    if ( packetType == null ) {
+                        packetData = packetDataFactory.newPacketData( Raw.class );
+                    }
+                    if ( packetType == PacketType.SSH_FXP_EXTENDED_REPLY ) {
+                        packetData = packetDataFactory.newPacketData(
+                                futureResponse.getExpectedType() );
+                    }
+                    else {
+                        packetData = packetDataFactory.newPacketData( packetType );
+                        if ( !(packetData instanceof Response) ) {
+                            throw new UnsupportedOperationException( "unexpected packet: " + packetData.toString() );
+                        }
+                    }
+                    futureResponse.setPacketData( packetData.parseFrom( buffer ) );
+                }
             }
         }
 
