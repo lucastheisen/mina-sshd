@@ -6,9 +6,6 @@ import org.apache.sftp.protocol.packetdata.Version;
 
 
 public class DefaultVersion extends AbstractVersion<Version> implements Version {
-    protected DefaultVersion() {
-    }
-
     @Override
     public PacketType getPacketType() {
         return PacketType.SSH_FXP_INIT;

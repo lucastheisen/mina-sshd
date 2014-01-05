@@ -18,7 +18,7 @@ public class DefaultOpen
     private SftpFileAttributes fileAttributes;
     private EnumSet<PFlag> pflags;
 
-    protected DefaultOpen() {
+    public DefaultOpen() {
         fileAttributes = new SftpFileAttributes();
     }
 
@@ -74,7 +74,7 @@ public class DefaultOpen
 
     @Override
     public void writeTo2( SftpProtocolBuffer buffer ) {
-        buffer.putInt( MaskFactory.toMask( pflags ) );
+        buffer.putInt( (int)MaskFactory.toMask( pflags ) );
         fileAttributes.writeTo( buffer );
     }
 }

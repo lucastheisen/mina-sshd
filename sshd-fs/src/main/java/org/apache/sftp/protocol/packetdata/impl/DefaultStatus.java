@@ -15,9 +15,6 @@ public class DefaultStatus
     private Code code;
     private String message;
     private Locale messageLocale;
-    
-    protected DefaultStatus() {
-    }
 
     @Override
     public void appendToStringBuilder( StringBuilder builder ) {

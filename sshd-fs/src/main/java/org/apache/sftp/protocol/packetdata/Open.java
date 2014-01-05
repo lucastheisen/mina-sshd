@@ -27,7 +27,7 @@ public interface Open extends BasePath<Open>, BaseAttrs<Open>, Request<Open, Han
             this.value = value;
         }
 
-        public int getValue() {
+        public long getValue() {
             return value;
         }
     }

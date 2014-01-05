@@ -9,9 +9,6 @@ import org.apache.sftp.protocol.packetdata.Stat;
 public class DefaultStat
         extends AbstractPath<Stat>
         implements Stat {
-    protected DefaultStat() {
-    }
-
     @Override
     public Class<Attrs> expectedResponseType() {
         return Attrs.class;

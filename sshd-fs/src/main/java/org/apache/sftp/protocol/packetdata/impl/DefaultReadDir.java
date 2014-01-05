@@ -9,9 +9,6 @@ import org.apache.sftp.protocol.packetdata.ReadDir;
 public class DefaultReadDir
         extends AbstractHandle<ReadDir>
         implements ReadDir {
-    protected DefaultReadDir() {
-    }
-
     @Override
     public Class<Name> expectedResponseType() {
         return Name.class;

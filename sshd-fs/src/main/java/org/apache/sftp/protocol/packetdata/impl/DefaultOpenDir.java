@@ -9,10 +9,6 @@ import org.apache.sftp.protocol.packetdata.OpenDir;
 public class DefaultOpenDir
         extends AbstractPath<OpenDir>
         implements OpenDir {
-
-    protected DefaultOpenDir() {
-    }
-
     @Override
     public Class<Handle> expectedResponseType() {
         return Handle.class;

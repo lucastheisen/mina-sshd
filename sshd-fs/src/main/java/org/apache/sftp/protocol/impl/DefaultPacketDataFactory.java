@@ -1,4 +1,4 @@
-package org.apache.sftp.protocol.packetdata.impl;
+package org.apache.sftp.protocol.impl;
 
 
 import java.util.HashMap;
@@ -38,8 +38,43 @@ import org.apache.sftp.protocol.packetdata.Status;
 import org.apache.sftp.protocol.packetdata.SymLink;
 import org.apache.sftp.protocol.packetdata.Version;
 import org.apache.sftp.protocol.packetdata.Write;
+import org.apache.sftp.protocol.packetdata.impl.DefaultAttrs;
+import org.apache.sftp.protocol.packetdata.impl.DefaultClose;
+import org.apache.sftp.protocol.packetdata.impl.DefaultData;
+import org.apache.sftp.protocol.packetdata.impl.DefaultFSetStat;
+import org.apache.sftp.protocol.packetdata.impl.DefaultFStat;
+import org.apache.sftp.protocol.packetdata.impl.DefaultHandle;
+import org.apache.sftp.protocol.packetdata.impl.DefaultInit;
+import org.apache.sftp.protocol.packetdata.impl.DefaultLStat;
+import org.apache.sftp.protocol.packetdata.impl.DefaultMkDir;
+import org.apache.sftp.protocol.packetdata.impl.DefaultName;
+import org.apache.sftp.protocol.packetdata.impl.DefaultOpen;
+import org.apache.sftp.protocol.packetdata.impl.DefaultOpenDir;
+import org.apache.sftp.protocol.packetdata.impl.DefaultRead;
+import org.apache.sftp.protocol.packetdata.impl.DefaultReadDir;
+import org.apache.sftp.protocol.packetdata.impl.DefaultReadLink;
+import org.apache.sftp.protocol.packetdata.impl.DefaultRealPath;
+import org.apache.sftp.protocol.packetdata.impl.DefaultRemove;
+import org.apache.sftp.protocol.packetdata.impl.DefaultRename;
+import org.apache.sftp.protocol.packetdata.impl.DefaultRmDir;
+import org.apache.sftp.protocol.packetdata.impl.DefaultSetStat;
+import org.apache.sftp.protocol.packetdata.impl.DefaultStat;
+import org.apache.sftp.protocol.packetdata.impl.DefaultStatus;
+import org.apache.sftp.protocol.packetdata.impl.DefaultSymLink;
+import org.apache.sftp.protocol.packetdata.impl.DefaultVersion;
+import org.apache.sftp.protocol.packetdata.impl.DefaultWrite;
+import org.apache.sftp.protocol.packetdata.openssh.FStatVfs;
+import org.apache.sftp.protocol.packetdata.openssh.FSync;
+import org.apache.sftp.protocol.packetdata.openssh.HardLink;
 import org.apache.sftp.protocol.packetdata.openssh.PosixRename;
+import org.apache.sftp.protocol.packetdata.openssh.StatVfs;
+import org.apache.sftp.protocol.packetdata.openssh.StatVfsReply;
+import org.apache.sftp.protocol.packetdata.openssh.impl.DefaultFStatVfs;
+import org.apache.sftp.protocol.packetdata.openssh.impl.DefaultFSync;
+import org.apache.sftp.protocol.packetdata.openssh.impl.DefaultHardLink;
 import org.apache.sftp.protocol.packetdata.openssh.impl.DefaultPosixRename;
+import org.apache.sftp.protocol.packetdata.openssh.impl.DefaultStatVfs;
+import org.apache.sftp.protocol.packetdata.openssh.impl.DefaultStatVfsReply;
 
 
 public class DefaultPacketDataFactory implements PacketDataFactory {
@@ -74,8 +109,19 @@ public class DefaultPacketDataFactory implements PacketDataFactory {
         registerImplementation( Remove.class, DefaultRemove.class );
         registerImplementation( SetStat.class, DefaultSetStat.class );
 
+        // TODO: find a better way of obtaining the extendedRequest
+        // it is available via instance method, but instantiation is silly,
+        // so perhaps annotation?  not sure...
         registerExtendedImplementation( PosixRename.class, DefaultPosixRename.class,
                 "posix-rename@openssh.com", null, null );
+        registerExtendedImplementation( StatVfs.class, DefaultStatVfs.class,
+                "statvfs@openssh.com", StatVfsReply.class, DefaultStatVfsReply.class );
+        registerExtendedImplementation( FStatVfs.class, DefaultFStatVfs.class,
+                "fstatvfs@openssh.com", StatVfsReply.class, DefaultStatVfsReply.class );
+        registerExtendedImplementation( HardLink.class, DefaultHardLink.class,
+                "hardlink@openssh.com", null, null );
+        registerExtendedImplementation( FSync.class, DefaultFSync.class,
+                "fsync@openssh.com", null, null );
     }
 
     @SuppressWarnings("unchecked")

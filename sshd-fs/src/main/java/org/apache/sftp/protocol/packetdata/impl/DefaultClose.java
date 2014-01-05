@@ -9,8 +9,6 @@ import org.apache.sftp.protocol.packetdata.Status;
 public class DefaultClose
         extends AbstractHandle<Close>
         implements Close {
-    protected DefaultClose() {}
-
     @Override
     public Class<Status> expectedResponseType() {
         return Status.class;

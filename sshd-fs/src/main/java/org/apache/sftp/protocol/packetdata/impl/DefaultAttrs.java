@@ -8,8 +8,6 @@ import org.apache.sftp.protocol.packetdata.Attrs;
 public class DefaultAttrs extends AbstractPacketData<Attrs> implements Attrs {
     private SftpFileAttributes fileAttributes;
     
-    protected DefaultAttrs() {}
-
     @Override
     public void appendToStringBuilder( StringBuilder builder ) {
         builder.append( ",'fileAttributes':" ).append( fileAttributes );

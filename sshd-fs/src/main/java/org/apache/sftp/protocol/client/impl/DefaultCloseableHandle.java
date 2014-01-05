@@ -10,6 +10,7 @@ import org.apache.sftp.protocol.StatusException;
 import org.apache.sftp.protocol.client.CloseableHandle;
 import org.apache.sftp.protocol.client.RequestProcessor;
 import org.apache.sftp.protocol.impl.SftpProtocolBuffer;
+import org.apache.sftp.protocol.packetdata.BaseHandle;
 import org.apache.sftp.protocol.packetdata.Close;
 import org.apache.sftp.protocol.packetdata.Handle;
 import org.apache.sftp.protocol.packetdata.Status;
@@ -17,10 +18,10 @@ import org.apache.sftp.protocol.packetdata.Status.Code;
 
 
 public class DefaultCloseableHandle implements CloseableHandle {
-    private Handle handle;
+    private BaseHandle<?> handle;
     private RequestProcessor requestProcessor;
 
-    DefaultCloseableHandle( RequestProcessor requestProcessor, Handle handle ) {
+    DefaultCloseableHandle( RequestProcessor requestProcessor, BaseHandle<?> handle ) {
         this.requestProcessor = requestProcessor;
         this.handle = handle;
     }

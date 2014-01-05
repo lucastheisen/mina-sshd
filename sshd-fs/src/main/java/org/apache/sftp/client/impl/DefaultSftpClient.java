@@ -10,7 +10,7 @@ import org.apache.sftp.protocol.NegotiatedVersion;
 import org.apache.sftp.protocol.PacketDataFactory;
 import org.apache.sftp.protocol.client.RequestProcessor;
 import org.apache.sftp.protocol.client.impl.DefaultRequestProcessor;
-import org.apache.sftp.protocol.packetdata.impl.DefaultPacketDataFactory;
+import org.apache.sftp.protocol.impl.DefaultPacketDataFactory;
 import org.apache.sshd.ClientSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

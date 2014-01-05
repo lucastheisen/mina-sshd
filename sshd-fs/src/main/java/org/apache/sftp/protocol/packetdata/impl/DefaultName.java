@@ -16,7 +16,7 @@ public class DefaultName
         implements Name {
     private List<NameEntry> nameEntries;
 
-    protected DefaultName() {
+    public DefaultName() {
         this.nameEntries = new ArrayList<>();
     }
 

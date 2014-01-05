@@ -12,7 +12,7 @@ public class DefaultRaw
     private byte packetTypeByte;
     private byte[] data;
 
-    protected DefaultRaw( byte packetTypeByte ) {
+    public DefaultRaw( byte packetTypeByte ) {
         this.packetTypeByte = packetTypeByte;
     }
 

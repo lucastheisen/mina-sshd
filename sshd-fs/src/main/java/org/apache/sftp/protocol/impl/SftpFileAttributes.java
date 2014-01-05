@@ -175,7 +175,7 @@ public class SftpFileAttributes {
         // ensure flags was initialized 
         EnumSet<Flag> flags = flags();
 
-        buffer.putInt( MaskFactory.toMask( flags ) );
+        buffer.putInt( (int)MaskFactory.toMask( flags ) );
         if ( flags.contains( Flag.SSH_FILEXFER_ATTR_SIZE ) ) {
             buffer.putLong( size );
         }
@@ -184,7 +184,7 @@ public class SftpFileAttributes {
             buffer.putInt( gid );
         }
         if ( flags.contains( Flag.SSH_FILEXFER_ATTR_PERMISSIONS ) ) {
-            buffer.putInt( MaskFactory.toMask( permissions ) );
+            buffer.putInt( (int)MaskFactory.toMask( permissions ) );
         }
         if ( flags.contains( Flag.SSH_FILEXFER_ATTR_ACMODTIME ) ) {
             buffer.putInt( (int)lastAccessTime.to( TimeUnit.SECONDS ) );
@@ -206,14 +206,14 @@ public class SftpFileAttributes {
         SSH_FILEXFER_ATTR_ACMODTIME(0x00000008),
         SSH_FILEXFER_ATTR_EXTENDED(0x80000000);
 
-        private int value;
+        private long value;
 
         private Flag( int value ) {
             this.value = value;
         }
 
         @Override
-        public int getValue() {
+        public long getValue() {
             return value;
         }
     }
@@ -258,7 +258,7 @@ public class SftpFileAttributes {
         }
 
         @Override
-        public int getValue() {
+        public long getValue() {
             return value;
         }
 
